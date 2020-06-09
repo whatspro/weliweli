@@ -1,11 +1,13 @@
 package message.dto;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
 
 import java.util.Date;
 
 @Data
-public class MessageDTO {
+@AllArgsConstructor
+public class MessageVO {
     private Long mid;
     private String content;
     private Long ownerUid;

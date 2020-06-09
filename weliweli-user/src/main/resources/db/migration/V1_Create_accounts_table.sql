@@ -6,7 +6,7 @@ create table accounts
     password    varchar(100) default ''                not null comment '密码',
     email       varchar(100) default ''                not null comment '邮箱',
     tel         varchar(100) default ''                not null comment '电话',
-    pic_url     varchar(100) default ''                not null comment '头像地址',
+    avator     varchar(100) default ''                not null comment '头像地址',
     create_date timestamp    default CURRENT_TIMESTAMP not null,
     create_by   bigint       default -1                not null comment '创建人',
     update_date timestamp    default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP,

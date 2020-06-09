@@ -1,11 +1,20 @@
 package message.service;
 
+import admin.dao.UserDao;
+import admin.entity.User;
+import com.alibaba.fastjson.JSONObject;
+import message.dao.MessageContactDao;
 import message.dao.MessageContentDao;
 import message.dao.MessageRelationDao;
+import message.dto.MessageVO;
+import message.entity.MessageContact;
 import message.entity.MessageContent;
 import message.entity.MessageRelation;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
+import share.Constants;
 
 import java.util.Date;
 
@@ -18,7 +27,16 @@ public class MessageService {
     @Autowired
     MessageRelationDao relationDao;
 
-    public String sendMsg(Long senderUid, Long receiverUid, String content, Integer msgType) {
+    @Autowired
+    MessageContactDao contactDao;
+
+    @Autowired
+    UserDao userDao;
+
+    @Autowired
+    JedisPool redisPool;
+
+    public MessageVO sendMsg(Long senderUid, Long receiverUid, String content, Integer msgType) {
         Date currentDate = new Date();
         //存消息
         MessageContent messageContent = new MessageContent();
@@ -37,12 +55,48 @@ public class MessageService {
                 msgType, currentDate);
         relationDao.save(messageRelationReceiver);
 
-        //存最近聊天
+        //存发件人最近聊天
+        MessageContact senderContact = contactDao.find(senderUid);
+        if (senderContact == null) {
+            senderContact = new MessageContact(senderUid, receiverUid, mid, msgType,
+                    currentDate);
+            contactDao.save(senderContact);
+        } else {
+            senderContact.setOtherUid(receiverUid);
+            senderContact.setCreateTime(currentDate);
+            senderContact.setMid(mid);
+            senderContact.setType(msgType);
+            contactDao.update(senderContact);
+        }
 
+        //存收件人最近聊天奶
+        MessageContact receiverContact = contactDao.find(receiverUid);
+        if (receiverContact == null) {
+            receiverContact = new MessageContact(receiverUid, senderUid, mid, msgType,
+                    currentDate);
+        } else {
+            receiverContact.setOtherUid(senderUid);
+            receiverContact.setMid(mid);
+            receiverContact.setType(msgType);
+            receiverContact.setCreateTime(currentDate);
+            contactDao.update(receiverContact);
+        }
 
+        MessageVO messageVO;
         //更新未读
+        try (Jedis jedis = redisPool.getResource()) {
+            jedis.decr(receiverUid + "_T"); //总未读
+            jedis.decr(receiverUid + "_C");  //分未读
 
-        //推送到redis
 
+            //推送到redis
+            User sender = userDao.get(senderUid);
+            User receiver = userDao.get(receiverUid);
+            messageVO = new MessageVO(mid, content, senderUid, msgType,
+                    receiverUid, currentDate, sender.getAvator(), receiver.getAvator(),
+                    sender.getUserName(), receiver.getUserName());
+            jedis.publish(Constants.WEBSOCKET_MSG_TOPIC, JSONObject.toJSONString(messageVO));
+        }
+        return messageVO;
     }
 }
